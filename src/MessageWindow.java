@@ -107,7 +107,7 @@ public class MessageWindow extends AppWindow {
         gbc_lblPosteingang.gridy = 3;
         getContentPane().add(lblPosteingang, gbc_lblPosteingang);
 
-        messages = new JList(server.receiveMessages(userID));
+        messages = new JList(); //server.receiveMessages(userID)
         scrollPane = new JScrollPane(messages);
         gbc_scrollPane = new GridBagConstraints();
         gbc_scrollPane.gridheight = 2;

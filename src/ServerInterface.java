@@ -32,7 +32,7 @@ public class ServerInterface {
             JSONObject json = getUser(id);
             String salt = json.getString("salt_masterkey");
             String pubKey = json.getString("pubkey_user"); //Nur für den Nachrichtenversandt.
-            String privKeyEnc = json.getString("privkey_user_enc");
+            String privKeyEnc = json.getString("privatekey_user_enc");
             String masterKey = c.generateMasterkey(password, salt);
             privateKey = c.decryptPrivateKey(privKeyEnc, masterKey);
 
@@ -80,7 +80,7 @@ public class ServerInterface {
 
             JSONObject user = new JSONObject();
             user.put("salt_masterkey", saltmaster);
-            user.put("privkey_user_enc", c.encryptPrivateKey(privateKey, masterKey));
+            user.put("privatekey_user_enc", c.encryptPrivateKey(privateKey, masterKey));
             user.put("pubkey_user", publicKey);
             OutputStreamWriter wr = new OutputStreamWriter(httpCon.getOutputStream());
             wr.write(user.toString());
