@@ -7,7 +7,7 @@ public class ServerInterface {
     private Crypt c = new Crypt();
     private String id;
     private static String privateKey;
-    private final String address = "http://localhost:3000/";
+    private final String address = "https://mighty-peak-92590.herokuapp.com/";
 
     /**
      * Die Anwendung bezieht saltmaster, pubkey und privKeyEnc von dem Dienstanbeiter auf Basis der angegebenen Identität.
@@ -26,16 +26,14 @@ public class ServerInterface {
      * @throws Exception
      */
     public boolean login(String id, String password) throws Exception {
-        JSONObject json = getUser(id);
-
-        String salt = json.getString("saltmaster");
-        String pubKey = json.getString("pubkey"); //Nur für den Nachrichtenversandt.
-        String privKeyEnc = json.getString("privkeyenc");
-
-        String masterKey = c.generateMasterkey(password, salt);
-
         try {
+            JSONObject json = getUser(id);
+            String salt = json.getString("salt_masterkey");
+            String pubKey = json.getString("pubkey_user"); //Nur für den Nachrichtenversandt.
+            String privKeyEnc = json.getString("privkey_user_enc");
+            String masterKey = c.generateMasterkey(password, salt);
             privateKey = c.decryptPrivateKey(privKeyEnc, masterKey);
+
         }catch(Exception e){
             return false;
         }
@@ -76,15 +74,15 @@ public class ServerInterface {
         String publicKey = c.getPublicKey();
 
         JSONObject user = new JSONObject();
-        user.put("saltMaster", saltmaster);
-        user.put("privKeyEnc", c.encryptPrivateKey(privateKey, masterKey));
-        user.put("pubKey", publicKey);
+        user.put("salt_masterkey", saltmaster);
+        user.put("privkey_user_enc", c.encryptPrivateKey(privateKey, masterKey));
+        user.put("pubkey_user", publicKey);
         OutputStreamWriter wr = new OutputStreamWriter(httpCon.getOutputStream());
         wr.write(user.toString());
         wr.flush();
         int returnCode = httpCon.getResponseCode();
         httpCon.disconnect();
-        if(returnCode==201){
+        if(returnCode==200){
             return true;
         }else{
             return false;
@@ -102,9 +100,8 @@ public class ServerInterface {
      * @throws Exception
      */
     public boolean sendMessage(String id, String targetID, String message) throws Exception {
-        //fertig
         JSONObject recipient = getUser(targetID);
-        String pubKeyRecipient = recipient.getString("pubkey");
+        String pubKeyRecipient = recipient.getString("pubkey_user");
 
         URL url = new URL(address + id +"/message");
         HttpURLConnection httpCon = (HttpURLConnection) url.openConnection();
@@ -113,6 +110,7 @@ public class ServerInterface {
         httpCon.setRequestProperty("Content-Type", "application/json");
         httpCon.setRequestProperty("Accept", "application/json");
 
+        //Noch prüfen
         long timestamp = System.currentTimeMillis()/1000L;
         String keyRecipient = c.generateKeyRecipient();
         String iv = c.generateIv();
@@ -121,28 +119,23 @@ public class ServerInterface {
         String sigRecipient = c.hashAndEncryptSigRecipient(id, cipher, iv, keyRecipient, privateKey);
 
         JSONObject innerEnvelope = new JSONObject();
-        innerEnvelope.put("sourceUserID", id);
+        innerEnvelope.put("sender", id);
         innerEnvelope.put("cipher", cipher);
         innerEnvelope.put("iv", iv);
-        innerEnvelope.put("keyRecEnc", keyRecipientEnc);
-        innerEnvelope.put("sigRec", sigRecipient);
+        innerEnvelope.put("key_recipient_enc", keyRecipientEnc);
+        innerEnvelope.put("sig_recipient", sigRecipient);
 
 
 
         String sigService = c.hashAndEncryptSigService(targetID, timestamp, innerEnvelope, privateKey);
 
-//        String mockCipher = message;
-//        String mockKeyRecipientEnc = "324232342";
-//        String mockSigRec = "0287548243";
-//        String mockSigService = "2zd203d";
-
         JSONObject messageJs = new JSONObject();
-        messageJs.put("targetUserID", targetID);
+        messageJs.put("identität", targetID);
         messageJs.put("cipher", cipher);
         messageJs.put("iv", iv);
-        messageJs.put("keyRecEnc", keyRecipientEnc);
-        messageJs.put("sigRec", sigRecipient);
-        messageJs.put("sigService", sigService);
+        messageJs.put("key_recipient_enc", keyRecipientEnc);
+        messageJs.put("sig_recipient", sigRecipient);
+        messageJs.put("sig_service", sigService);
         messageJs.put("timestamp", timestamp);
 
         OutputStreamWriter wr = new OutputStreamWriter(httpCon.getOutputStream());
@@ -168,10 +161,10 @@ public class ServerInterface {
      */
     public String[] receiveMessages(String id) throws Exception{
         StringBuilder result = new StringBuilder();
-        URL url = new URL(address + id + "/messages");
+        URL url = new URL(address + id + "/message");
         HttpURLConnection httpCon = (HttpURLConnection) url.openConnection();
         httpCon.setDoOutput(true);
-        httpCon.setRequestMethod("POST");
+        httpCon.setRequestMethod("GET");
         httpCon.setRequestProperty("Content-Type", "application/json");
         httpCon.setRequestProperty("Accept", "application/json");
 
@@ -180,8 +173,8 @@ public class ServerInterface {
 //
 //      Anfrage zum Nachrichtenabruf
         JSONObject messageRequest = new JSONObject();
-        messageRequest.put("timeStamp", timestamp);
-        messageRequest.put("sigService", sigService);
+        messageRequest.put("timestamp", timestamp);
+        messageRequest.put("sig_service", sigService);
         OutputStreamWriter wr = new OutputStreamWriter(httpCon.getOutputStream());
         wr.write(messageRequest.toString());
         wr.flush();
@@ -205,15 +198,15 @@ public class ServerInterface {
         int jlistIndex = 0;
         for(int i=0; i<jsonArr.length(); i++){
             JSONObject jsonObj = jsonArr.getJSONObject(i);
-            String sigRec = jsonObj.getString("sigrec");
-            int fromID = jsonObj.getInt("sourceuserid");
+            String sigRec = jsonObj.getString("sig_recipient");
+            String fromID = jsonObj.getString("sender");
             JSONObject user = getUser(String.valueOf(fromID));
-            String pubKeySource = user.getString("pubkey");
+            String pubKeySource = user.getString("pubkey_user");
             try{
                 c.decryptSigRecipient(sigRec, pubKeySource);
                 String iv = jsonObj.getString("iv");
                 String cipher = jsonObj.getString("cipher");
-                String keyRecEnc = jsonObj.getString("keyrecenc");
+                String keyRecEnc = jsonObj.getString("key_recipient_enc");
                 String keyRec = c.decryptKeyRecipient(keyRecEnc,privateKey);
                 messages[jlistIndex] = "Absender:" +fromID;
                 jlistIndex++;
@@ -240,6 +233,7 @@ public class ServerInterface {
      * @throws Exception
      */
     public JSONObject getUser(String id) throws Exception{
+        JSONObject json;
         StringBuilder result = new StringBuilder();
         URL url = new URL(address + id);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -250,7 +244,15 @@ public class ServerInterface {
             result.append(line);
         }
         rd.close();
-        JSONObject json = new JSONObject(result.toString());
+        int returnCode = conn.getResponseCode();
+        conn.disconnect();
+        if(returnCode==200){
+            json = new JSONObject(result.toString());
+        }else{
+            json = new JSONObject();
+        }
+
+
         return json;
     }
 
