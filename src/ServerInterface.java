@@ -257,4 +257,5 @@ public class ServerInterface {
     public void logout(){
         privateKey = "";
     }
+    //
 }
